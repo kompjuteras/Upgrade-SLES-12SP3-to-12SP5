@@ -1,0 +1,48 @@
+- hosts: all
+  become: yes
+  become_user: root
+  become_method: sudo
+  ignore_errors: false
+  any_errors_fatal: true 
+
+  tasks:
+
+    - name: SUSE clients migration to ZYPPER mirror
+      block:
+        - name: Check does /usr have more than 3000MB of available space
+          shell: df -Pm /usr | awk 'FNR == 2 {print ($4+1)}'
+          register: df_usr
+          failed_when: df_usr.stdout|int < 3000
+          changed_when: False
+        - name: Remove Spacewalk related packages if any
+          zypper:
+            name:
+              - rhn-client-tools
+              - rhn-check 
+              - rhn-setup 
+              - rhnsd 
+              - yum-rhn-plugin 
+              - osad 
+              - rhncfg-actions
+              - spacecmd
+              - zypp-plugin-spacewalk
+            state: absent
+          when: ansible_os_family == "Suse" and ansible_distribution_major_version|int == 12
+
+    - name: Migration from SP3 to SP4
+      block: 
+        - name: Start with migration to SP4
+          shell: zypper migration --migration 2 --allow-vendor-change --non-interactive --auto-agree-with-licenses
+        - reboot:  
+        - setup: 
+      when: ansible_os_family == "Suse" and ansible_distribution_version == "12.3"
+
+    - name: Migration from SP4 to SP5
+      block: 
+        - name: Start with migration to SP5
+          shell: zypper migration --migration 1 --allow-vendor-change --non-interactive --auto-agree-with-licenses
+        - reboot:  
+        - setup: 
+      when: ansible_os_family == "Suse" and ansible_distribution_version == "12.4"
+
+    - debug: msg="Current SUSE version --> {{ ansible_distribution_version }}"
